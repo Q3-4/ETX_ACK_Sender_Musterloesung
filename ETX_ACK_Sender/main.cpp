@@ -1,98 +1,81 @@
+#include <iostream>
+#include <string>
+#include <chrono>
+#include <thread>
 #include "Serial.h"
 
 using namespace std;
 
-bool sender(Serial*);
+// Konstanten im Programm
+static constexpr uint8_t ACK = 0x06; // moderne, saubere Variante (C++11+)
+static const int ETX = 0x03;         // klassische Variante
 
-int main()
-{
-	string port_nr = "";
-	cout << "COM Port Nummer: ";
+/*static bool waitForCTS(Serial& com, int timeout_ms = 5000) {
+    using namespace std::chrono;
+    const auto deadline = steady_clock::now() + milliseconds(timeout_ms);
+    while (!com.isCTS()) {
+        if (steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(milliseconds(50)); // kein Busy-Wait
+    }
+    return true;
+}*/
 
-	cin >> port_nr;
-	//port_nr = "1";
-	
-	string port("COM");
-	port += port_nr;
-	Serial* com = new Serial((string)port, 9600, 8, NOPARITY, ONESTOPBIT);
+int main() {
+    cout << "COM-Port Nummer: ";
+    string portNr = "1";
+    //cin >> portNr;
 
-	sender(com);
+    string port = "COM" + portNr;
 
-	system("pause");
-	return 0;
+    Serial com(port, 9600, 8, ONESTOPBIT, NOPARITY);
+
+    if (!com.open()) {
+        cerr << "Fehler beim Öffnen von " << port << endl;
+        return 1;
+    }
+
+    // Erweiterung:
+    //if (!waitForCTS(com)) { cout << "CTS LOW!\n"; return 1; }
+
+    // Warten, bis Empfaenger über CTS betriebsbereit ist.
+    while (!com.isCTS()) { // CTS ist NICHT blockiernd; deshalb ist eine Schleife hier notwendig.
+        cout << "Warte auf RTS Signal..." << endl;
+    }
+    cout << "Empfaenger betriebsbereit.\n";
+
+    cout << "Sende ACK\n";
+    com.write(ACK);
+    
+    // 1. Variante: write(int)
+    // Experimentiere: Sende eine Zahl, einen Buchstaben und einen Text.  Wie kommt dieser, warum an?
+     char msg = 'X'; // Zeichen für "Abbruch"
+    do {
+        cout << "Sende das Byte: \n";
+        cin >> msg;
+        com.write(msg);
+    } while (msg != 'X');
+
+    //// 2. Variante: write(Puffer, Groesse)
+    //// Experimentiere: Sende Char ohne Binäre Null, mehr bzw. weniger Zeichen als erwartet.
+    //char puf[] = { 'T','E','S','T','\0'};
+    //cout << "Sende Byte-Puffer (TEST)...\n";
+    //com.write(puf, (int)sizeof(puf));
+
+    //// 3. Variante: write(string)
+    //// Experimentiere: Sende ohne '\n'!
+    //string msg = "Hallo serielle Welt!\n";
+    //do{
+    //cin >> msg;
+    //msg += '\n';
+    //cout << "Sende String...\n";
+    //com.write(msg);
+    //} while (msg != "X\n"); // Warum hier NICHT "X", wie beim Empfaenger?!
+
+    // Abschluss: ETX
+    cout << "Sende ETX...\n";
+    com.write(ETX);
+
+    cout << "Uebertragung abgeschlossen.\n";
+    return 0;
 }
 
-bool sender(Serial* com)
-{
-	const int ACK = 0x06; // Nullmodem-Kabel
-	const int ETX = 0x03;
-
-	// Test mit String und Char-Arrays
-	string string_text = "Hallo Welt!"; //für write(s: String):void
-	char char_text = {'\0'};			//für >> write(value: int):void UND write(b: byte[], len: int):void
-	
-	
-	char* ack = "6";			//Variante für Virtual Serial Port Tool, da der write-Befehl mit einem Buchstaben nicht funktioniert
-	char* etx = "3";
-
-	if (com->open())
-	{
-		cout << "Sender gestartet!" << endl;
-
-		while (!com->isCTS()) { cout << "Warte auf RTS Signal" << endl; }
-		cout << "Empf\x84nger betriebsbereit" << endl;
-
-		cout << "Warte auf ACK" << endl;
- 		while (com->read() != *ack);  // Variante mit Virtual Serial Port Tool
-		//while (comm->read() != ACK); // Variante mit Nullmodel-Kabel der Schule
-
-		do {
-			cout << "ACK erhalten" << endl;
-			cout << "Nachricht: " << endl;
-			
-			//cin >> char_text;
-
-			// EXTRA aus der Aufgabenstellung zu entnehmen, wenn Nullmodem Kabel unterbrochen wird.
-			while (!com->isCTS()) {
-				cout << "Leitung unterbrochen!" << endl;
-				com->close();
-				return false;
-			}
-			// 1. Methode write():int
-			// nicht möglich mit virtuellem Nullmodem!!!!
-				//comm->write((int)char_text);
-				//comm->write(ETX);
-	
-		
-			// 2. Methode write(Ziel, Zielgroesse):int
-			//comm->write(char_text,100); //für >> write(value: int):void UND write(b: byte[], len: int):void
-			//comm->write(etx);	
-
-			// 3. Methode write(s: string)
-			cin >> string_text;
-			com->write(string_text + '\n'); // Muss mit einem Zeilenendezeichen abgeschlossen werden.
-			com->write(etx, strlen(etx));  // Variante mit virtuellem Nullmodem
-
-			//comm->write(etx);				// Variante mit Nullmodel-Kabel
-			//comm->write('2');
-			// 
-			if (char_text == 'X' || string_text == "X") break;
-			//if (char_text[0] == 'X') break;
-
-
-			cout << "Warte auf ACK" << endl;
-		//} while (x == ACK); // Variante mit Nullmodel-Kabel
-		} while (com->read() == *ack);  // Variante mit virtuellem Nullmodem
-
-		while (com->isCTS()); 
-		cout<<"Empf\x84nger nicht mehr betriebsbereit"<<endl;
-
-		com->close(); 
-		cout << "\x9a \bbertragung beendet." << endl;
-	}
-	else
-	{
-		cout<<"Fehler beim \x99\bffnen"<<endl;
-	}
-	return true;
-}

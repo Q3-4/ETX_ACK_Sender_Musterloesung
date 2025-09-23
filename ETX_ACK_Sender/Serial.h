@@ -1,4 +1,6 @@
+// Version 09.2025 – klassische, blockierende Lese-Variante
 #pragma once
+
 #include <iostream>
 #include <string>
 #include <list>
@@ -6,41 +8,113 @@
 
 using namespace std;
 
-class Serial  
+/**
+ * @brief Einfache Wrapper-Klasse für eine serielle Schnittstelle unter Windows.
+ *
+ * Klassisches, blockierendes Leseverhalten:
+ *  - read() wartet, bis mindestens 1 Byte vorliegt (oder Fehler).
+ *  - readLine() wartet, bis ein '\n' empfangen wurde.
+ *  - read(buf,n) liest mindestens 1 Byte; danach alle sofort verfügbaren Bytes.
+ *
+ * Bietet Methoden zum Öffnen/Schließen, Senden/Empfangen von Daten
+ * sowie zur Steuerung von Handshake-Signalen (RTS/DTR/CTS/DSR).
+ *
+ * Beispiel:
+ *   Serial ser("COM3", 9600, 8, ONESTOPBIT, NOPARITY);
+ *   if (ser.open()) {
+ *       ser.write("Hello World\n");
+ *       int b = ser.read();         // blockiert bis 1 Byte kommt
+ *       string line = ser.readLine(); // blockiert bis '\n'
+ *       ser.close();
+ *   }
+ */
+class Serial
 {
 private:
-  // Der Port-Name (COM1, COM2)
- string portName;
-  // Die Datenübertragungsrate
-  int baudrate;
-  // Die Anzahl der Datenbits (5 .. 8)
-  int dataBits;
-  // Der Anzahl der Stoppbits (ONESTOPBIT, ONE5STOPBITS, TWOSTOPBITS)
-  int stopBits;
-  // Festlegung der Parität (EVENPARITY, NOPARITY, ODDPARITY)
-  int parity;
-
-  /** Handle für den Com-Port */
-  HANDLE handle;
+	string portName;  ///< COM-Port-Name, z. B. "COM3"
+	int baudrate;     ///< Baudrate (z. B. 9600, 115200)
+	int dataBits;     ///< Anzahl Datenbits (5–8)
+	int stopBits;     ///< ONESTOPBIT, ONE5STOPBITS oder TWOSTOPBITS
+	int parity;       ///< NOPARITY, ODDPARITY, EVENPARITY, ...
+	HANDLE handle;    ///< Handle auf den COM-Port (INVALID_HANDLE_VALUE, wenn geschlossen)
 
 public:
-  Serial(string portName, int baudrate, int dataBits, int stopBits, int parity); // der Konstruktor Initialisiert die serielle Schnittstelle ohne sie zu öffnen
-  ~Serial();
+	// -------- Konstruktoren / Destruktor --------
 
-  bool open(); // öffnet die serielle Schnittstelle; liefert true, wenn die Schnittstelle verwendbar ist
-  void close(); // schließt die serielle Schnittstelle; die Schnittstelle ist dann solange nicht mehr 
+	/**
+	 * @brief Konstruktor: Parameter setzen, aber Port noch nicht öffnen.
+	 */
+	Serial(string portName, int baudrate, int dataBits, int stopBits, int parity);
 
-  int dataAvailable(); // liefert die Anzahl der Byte, die von der seriellen Schnittstelle gelesen werden können
+	/**
+	 * @brief Destruktor: schließt die Schnittstelle automatisch, falls noch offen.
+	 */
+	~Serial();
 
-  int read(); // liest ein Byte (0..255) von der serielle Schnittstelle; Ist kein Byte verfügbar, liefert sie -1
-  int read(char *buffer, int bufSize); // liest mehrere Bytes von der seriellen Schnittstelle in ein Byte- Array; liefert die Anzahl der gelesenen Bytes oder -1, wenn keine Bytes verfügbar sind
-  string readLine(); // liest eine Zeile von der serielle Schnittstelle; eine Zeile wird durch ein Zeilenendezeichen abgeschlossen; das Zeilenendezeichen wird jedoch nicht in den zurückgegebene String übernommen
-  void write(int value); // schreibt ein Byte auf die serielle Schnittstelle; ist die Schnittstelle nicht geöffnet geschieht nichts
-  void write(const char *buffer, int bytesToWrite); // schreibt mehrere Bytes auf die serielle Schnittstelle; ist die Schnittstelle nicht bereit geschieht nichts
-  void write(string s); // schreibt einen String auf die serielle Schnittstelle; ist die Schnittstelle nicht geöffnet geschieht nichts 
-  void setRTS(bool arg); // setzt den Modem-Steuerausgangs RTS (request to send)
-  void setDTR(bool arg); // setzt den Modem-Steuerausgangs DTR (data terminal ready)
-  bool isCTS(); // liefert den Status des Modem-Meldeeingangs CTS (clear to send)
-  bool isDSR(); // liefert den Status des Modem-Meldeeingangs DSR (data set ready).
+	// -------- Basisoperationen --------
 
+	/**
+	 * @brief Öffnet die serielle Schnittstelle und setzt Parameter.
+	 * @return true, wenn erfolgreich geöffnet; false sonst.
+	 */
+	bool open();
+
+	/**
+	 * @brief Schließt die Schnittstelle (falls offen).
+	 */
+	void close();
+
+	/**
+	 * @brief Anzahl Bytes, die aktuell im Eingabepuffer verfügbar sind.
+	 * @return >=0; bei Fehler 0.
+	 */
+	int dataAvailable();
+
+	// -------- Leseoperationen (blockierend) --------
+
+	/**
+	 * @brief Liest ein einzelnes Byte (blockierend).
+	 * @return Wert 0–255 bei Erfolg; -1 nur bei Fehler oder wenn Port nicht offen ist.
+	 * @note Wartet, bis mindestens 1 Byte empfangen wurde.
+	 */
+	int read();
+
+	/**
+	 * @brief Liest bis zu bufSize Bytes.
+	 * @return Anzahl tatsächlich gelesener Bytes (>=1 bei Erfolg, 0 bei Fehler/geschlossenem Port).
+	 * @note Liest mindestens 1 Byte (blockierend). Danach werden alle sofort verfügbaren Bytes
+	 *       ohne weiteres Warten mitgenommen (bis bufSize erreicht ist).
+	 */
+	int read(char* buffer, int bufSize);
+
+	/**
+	 * @brief Liest Text bis zum Linefeed ('\n') (blockierend).
+	 * @return Empfangene Zeichenkette ohne '\n'.
+	 * @note Wartet, bis ein Newline empfangen wurde (klassisches Verhalten).
+	 */
+	string readLine();
+
+	// -------- Schreiboperationen --------
+
+	/**
+	 * @brief Schreibt ein einzelnes Byte.
+	 */
+	void write(int value);
+
+	/**
+	 * @brief Schreibt einen Datenpuffer.
+	 */
+	void write(const char* buffer, int bytesToWrite);
+
+	/**
+	 * @brief Schreibt einen String (ohne automatisches Newline).
+	 */
+	void write(string s);
+
+	// -------- Modem-/Handshake-Signale --------
+
+	void setRTS(bool arg);  ///< Setzt RTS-Leitung (true=aktiv)
+	void setDTR(bool arg);  ///< Setzt DTR-Leitung (true=aktiv)
+	bool isCTS();           ///< Liest CTS-Leitung (true=aktiv)
+	bool isDSR();           ///< Liest DSR-Leitung (true=aktiv)
 };
