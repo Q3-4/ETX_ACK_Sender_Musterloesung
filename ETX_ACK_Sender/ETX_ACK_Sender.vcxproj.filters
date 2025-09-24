@@ -29,7 +29,7 @@
     <ClCompile Include="Serial.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="ETS_ACK_Sender.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>

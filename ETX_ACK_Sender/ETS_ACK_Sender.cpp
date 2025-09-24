@@ -23,7 +23,7 @@ static const int ETX = 0x03;         // klassische Variante
 int main() {
     cout << "COM-Port Nummer: ";
     string portNr = "1";
-    //cin >> portNr;
+    cin >> portNr;
 
     string port = "COM" + portNr;
 
@@ -31,7 +31,7 @@ int main() {
 
     if (!com.open()) {
         cerr << "Fehler beim Öffnen von " << port << endl;
-        return 1;
+        return -1;
     }
 
     // Erweiterung:
